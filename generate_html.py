@@ -3,8 +3,8 @@ import base64
 from bs4 import BeautifulSoup
 
 
-def text_html(link, header=False, output_html_file='output.html'):
-    response = requests.get(link)
+def text_html(web_link, output_html_file='output.html'):
+    response = requests.get(web_link)
     soup = BeautifulSoup(response.content, 'html.parser')
     element = soup.select_one("div[class^='article-formatted-body'] > div")
 
@@ -42,4 +42,4 @@ def text_html(link, header=False, output_html_file='output.html'):
 if __name__ == "__main__":
     # Usage example
     link = ''
-    text_html(link, header=False, output_html_file='attachments/output.html')
+    text_html(link, output_html_file='attachments/output.html')

@@ -3,7 +3,7 @@ import telebot
 
 from send_to_kindle import send_email
 from env.env_reader import secrets
-from text_parser import TextParser, save_to_html
+from html_parser import HTMLParser
 
 # Create an instance of the bot
 bot = telebot.TeleBot(secrets['TELEBOT_KEY'])
@@ -35,11 +35,15 @@ def process_message(message):
     if links:
         for link in links:
             bot.send_message(message.chat.id, "Some links found. sending email")
-            article = TextParser(link)
-            attachment_name = f'{article.header}.html'
-            email = send_email(attachment_name)
-            print(email.status_code)
-            print(email.text)
+            article = HTMLParser(link)
+            article.generate_kindle_html()
+            email_sent = send_email(article.kindle_html)
+
+            if email_sent:
+                bot.send_message(message.chat.id, "Email sent successfully.")
+            else:
+                bot.send_message(message.chat.id, "Failed to send email.")
+
     else:
         bot.send_message(message.chat.id, "No hidden links found in the message.")
 

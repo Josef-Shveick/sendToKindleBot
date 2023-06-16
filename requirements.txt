@@ -2,3 +2,4 @@ requests==2.31.0
 telebot==0.0.5
 beautifulsoup4==4.12.2
 lxml==4.9.2
+transliterate==1.10.2

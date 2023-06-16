@@ -13,7 +13,7 @@ SENDER_EMAIL = secrets["TEST_MAIL"]
 RECIPIENT_EMAIL = secrets["KINDLE_MAIL"]
 
 
-def send_email():
+def send_email(file):
     # Create the email message
     subject = 'Hello from Python'
     body = 'This is the body of the email.'
@@ -28,22 +28,28 @@ def send_email():
     message.attach(MIMEText(body, 'plain'))
 
     # Load the attachment file
-    attachment_path = 'attachments/output.html'
-    with open(attachment_path, 'rb') as attachment_file:
+    with open(file, 'rb') as attachment_file:
         attachment = MIMEApplication(attachment_file.read())
 
     # Set the attachment filename
-    attachment_filename = 'kray_vselennoi.html'
-    attachment.add_header('Content-Disposition', 'attachment', filename=attachment_filename)
+    attachment.add_header('Content-Disposition', 'attachment', filename=file.split('/')[-1])
 
     # Add the attachment to the message
     message.attach(attachment)
 
-    # Connect to the SMTP server and send the email
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.send_message(message)
+    try:
+        # Connect to the SMTP server and send the email
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(message)
+
+        # Email sent successfully
+        return True
+    except Exception as e:
+        # An error occurred while sending the email
+        print(f"Error sending email: {str(e)}")
+        return False
 
 
 if __name__ == "__main__":
-    send_email()
+    send_email('attachment/output.html')
