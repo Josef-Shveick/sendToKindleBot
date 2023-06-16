@@ -50,7 +50,7 @@ class HTMLParser:
     def generate_kindle_html(self):
         response = requests.get(self.link)
         soup = BeautifulSoup(response.content, 'html.parser')
-        element = soup.select_one("div[class^='article-formatted-body'] > div")
+        element = soup.select_one(self._containers["body"])
 
         # Extract the text from the element
         text = element.get_text()
