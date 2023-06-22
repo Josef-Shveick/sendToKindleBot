@@ -86,5 +86,4 @@ class HTMLParser:
 if __name__ == '__main__':
     url = 'https://habr.com/ru/articles/740778/'
     article = HTMLParser(url)
-    # print(article.header)
     article.generate_kindle_html()
