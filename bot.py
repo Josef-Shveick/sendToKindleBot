@@ -5,6 +5,9 @@ from send_to_kindle import send_email
 from env.env_reader import secrets
 from html_parser import HTMLParser
 
+logger = telebot.logger
+telebot.logger.setLevel(logging.INFO)  # Outputs debug messages to console.
+
 # Create an instance of the bot
 bot = telebot.TeleBot(secrets['TELEBOT_KEY'])
 
@@ -70,4 +73,4 @@ def process_file(message):
 
 
 # Start the bot
-bot.polling(interval=1)
+bot.polling(interval=10)
