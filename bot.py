@@ -1,15 +1,12 @@
-import logging
+from helpers.logger import logger
 import telebot
+from io import BytesIO
 
-from send_to_kindle import send_email
-from env.env_reader import secrets
+from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
 
-logger = telebot.logger
-telebot.logger.setLevel(logging.INFO)  # Outputs debug messages to console.
-
 # Create an instance of the bot
-bot = telebot.TeleBot(secrets['TELEBOT_KEY'])
+bot = telebot.TeleBot(TELEBOT_KEY)
 
 
 # Handle the /start command
@@ -35,6 +32,7 @@ def process_link(message):
                 links.append(entity.url)
 
     if links:
+        logger.info(f"Some links found. Generating html for {links}")
         for link in links:
             bot.send_message(message.chat.id, "Some links found. Generating html")
             article = HTMLParser(link)
@@ -54,18 +52,22 @@ def process_file(message):
     files = [message.document]
     for file in files:
         file_name = file.file_name
+
+        if not file_name.endswith('.epub'):
+            bot.send_message(message.chat.id, f"Unsupported file format. Only .epub files accepted")
+            return
+
         file_info = bot.get_file(file.file_id)
         bot.send_message(message.chat.id, f"File found: {file_name}")
 
         try:
             downloaded_file = bot.download_file(file_info.file_path)
-            with open(f"attachments/{file_name}", 'wb') as new_file:
-                new_file.write(downloaded_file)
+            file_buffer = BytesIO(downloaded_file)  # In-memory file-like object not to save file to disk
         except Exception as e:
             bot.send_message(message.chat.id, f"Error downloading file: {str(e)}")
-            continue
+            return
 
-        file_sent = send_email(f"attachments/{file_name}")
+        file_sent = send_email(file_buffer, file_name)
         if file_sent:
             bot.send_message(message.chat.id, f"{file_name} sent to kindle successfully.")
         else:

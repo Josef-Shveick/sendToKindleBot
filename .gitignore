@@ -2,4 +2,7 @@
 venv/
 __pycache__/
 .pytest_cache/
-env/secrets.json
+secrets.env
+attachments/
+play.py
+send_to_kindle_bot.log
