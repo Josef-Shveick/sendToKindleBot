@@ -120,7 +120,7 @@ def process_file(message):
             return
 
         file_info = bot.get_file(file.file_id)
-        bot.send_message(message.chat.id, f"File found: {file_name}")
+        bot.send_message(message.chat.id, f"File found: {file_name}.\nAttempting to send to {username} kindle...")
 
         try:
             downloaded_file = bot.download_file(file_info.file_path)
