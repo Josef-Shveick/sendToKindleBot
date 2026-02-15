@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from io import BytesIO
 import requests
 import os
+from mangum import Mangum
 
 from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
@@ -11,6 +12,7 @@ from html_parser import HTMLParser
 # Create an instance of the bot
 bot = telebot.TeleBot(TELEBOT_KEY)
 app = FastAPI()
+handler = Mangum(app)
 
 
 # --- MODE SELECTION ---
