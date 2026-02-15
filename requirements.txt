@@ -5,3 +5,4 @@ lxml
 transliterate
 fastapi
 mangum
+uvicorn
