@@ -1,9 +1,7 @@
-FROM python:3.15.0a6-alpine
+FROM public.ecr.aws/lambda/python:3.11
 
-WORKDIR /bot
-
-COPY bot.py html_parser.py requirements.txt send_to_kindle.py helpers /bot/
+COPY bot.py html_parser.py requirements.txt send_to_kindle.py helpers ./
 
 RUN pip install --no-cache-dir --upgrade -r /bot/requirements.txt
 
-CMD ["uvicorn", "bot:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["bot.handler"]
