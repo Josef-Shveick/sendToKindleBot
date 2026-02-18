@@ -1,10 +1,17 @@
 services:
-  kindle_bot:
-    container_name: kindle_bot_container
-    image: kindle_bot_image:1.0.0
+  kindle_bot_aws:
+    container_name: kindle_bot_aws_container
+    image: sendtokindleregistry/kindle_bot_image:1.0.0
     build:
       context: ..
-      dockerfile: docker/Dockerfile_local
+      dockerfile: docker/Dockerfile_aws
+
+  kindle_bot_local:
+    container_name: kindle_bot_local_container
+    image: kindle_bot_local_image:1.0.0
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "80:5000"
     env_file: ../secrets.env
