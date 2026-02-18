@@ -4,10 +4,8 @@ import base64
 from transliterate import translit
 import os
 
-POOLING = os.environ.get("POOLING", "false").lower() == "true"
-storage = "/tmp"
-if POOLING: # for local development
-    storage = "attachments"
+# set POOLING=true for local development - output will be saved to local attachments folder
+storage = "attachments" if os.environ.get("POOLING", "false").lower() == "true" else "/tmp"
 
 
 class HTMLParser:
@@ -93,5 +91,6 @@ class HTMLParser:
 
 if __name__ == "__main__":
     url = 'https://habr.com/ru/articles/740778/'
-    article = HTMLParser(url)
-    article.generate_kindle_html()
+    # article = HTMLParser(url)
+    # article.generate_kindle_html()
+    print(storage)
