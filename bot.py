@@ -1,73 +1,58 @@
 from helpers.logger import logger
 import telebot
-from fastapi import FastAPI, Request
 from io import BytesIO
 import requests
 import os
-from mangum import Mangum
+import json
 
 from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
 
 # Create an instance of the bot
 bot = telebot.TeleBot(TELEBOT_KEY)
-app = FastAPI()
-handler = Mangum(app)
-
 
 # --- MODE SELECTION ---
 POOLING = os.environ.get("POOLING", "false").lower() == "true"
 
-if not POOLING:
-    # Auto-detect your AWS Lambda Function URL if available
-    WEBHOOK_BASE_URL = os.environ.get("AWS_LAMBDA_FUNCTION_URL") or os.environ.get("WEBHOOK_BASE_URL")
+# Webhook URL for Lambda deployment
+WEBHOOK_BASE_URL = os.environ.get("AWS_LAMBDA_FUNCTION_URL") or os.environ.get("WEBHOOK_BASE_URL")
+WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/{TELEBOT_KEY}/" if WEBHOOK_BASE_URL else None
 
-    if not WEBHOOK_BASE_URL:
-        raise RuntimeError("No WEBHOOK_BASE_URL found — set AWS_LAMBDA_FUNCTION_URL or WEBHOOK_BASE_URL")
+# This flag ensures we only set webhook once per cold start
+_webhook_checked = False
 
-    WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/{TELEBOT_KEY}/"
+# --- WEBHOOK SETUP FUNCTION ---
+def set_webhook():
+    """Register Telegram webhook once (idempotent)."""
+    global _webhook_checked
+    if _webhook_checked or not WEBHOOK_URL:
+        return
 
-    @app.on_event("startup")
-    def on_startup():
-        set_webhook()
-
-    def set_webhook():
-        """Register Telegram webhook once (idempotent)."""
+    try:
         get_info_url = f"https://api.telegram.org/bot{TELEBOT_KEY}/getWebhookInfo"
         set_url = f"https://api.telegram.org/bot{TELEBOT_KEY}/setWebhook"
 
-        try:
-            info = requests.get(get_info_url, timeout=10)
-            info.raise_for_status()
-            data = info.json()
+        info = requests.get(get_info_url, timeout=10)
+        info.raise_for_status()
+        data = info.json()
 
-            if data.get("ok") and data["result"].get("url") == WEBHOOK_URL:
-                logger.info(f"Webhook already set to {WEBHOOK_URL}")
-                return
+        if data.get("ok") and data["result"].get("url") == WEBHOOK_URL:
+            logger.info(f"Webhook already set to {WEBHOOK_URL}")
+            _webhook_checked = True
+            return
 
-            resp = requests.post(set_url, data={"url": WEBHOOK_URL}, timeout=10)
-            resp.raise_for_status()
+        resp = requests.post(set_url, data={"url": WEBHOOK_URL}, timeout=10)
+        resp.raise_for_status()
 
-            if resp.json().get("ok"):
-                logger.info(f"Webhook set successfully to {WEBHOOK_URL}")
-            else:
-                logger.info(f"Failed to set webhook: {resp.text}")
+        if resp.json().get("ok"):
+            logger.info(f"Webhook set successfully to {WEBHOOK_URL}")
+        else:
+            logger.info(f"Failed to set webhook: {resp.text}")
 
-        except Exception as e:
-            logger.info(f"Error while setting webhook: {e}")
+    except Exception as e:
+        logger.info(f"Error while setting webhook: {e}")
 
-    @app.post(f"/{TELEBOT_KEY}/")
-    async def telegram_webhook(request: Request):
-        """Receive Telegram updates via webhook"""
-        json_data = await request.json()
-        update = telebot.types.Update.de_json(json_data)
-        bot.process_new_updates([update])
-        return {"ok": True}
-
-    @app.get("/")
-    def root():
-        return {"status": "ok"}
-
+    _webhook_checked = True
 
 # --- BOT HANDLERS ---
 
@@ -138,6 +123,30 @@ def process_file(message):
             bot.send_message(message.chat.id, f"Failed to send {file_name} to {username} kindle.")
 
 
-if POOLING: # for local development/test if there's no external url for webhook
+# --- AWS LAMBDA HANDLER ---
+def handler(event, context):
+    """
+    AWS Lambda entrypoint.
+    Receives Telegram webhook updates as event["body"]
+    """
+    set_webhook()  # ensure webhook is set once
+
+    try:
+        body = event.get("body")
+        if isinstance(body, str):
+            body = json.loads(body)
+
+        update = telebot.types.Update.de_json(body)
+        bot.process_new_updates([update])
+
+        return {"statusCode": 200, "body": json.dumps({"ok": True})}
+
+    except Exception as e:
+        logger.error(f"Error processing update: {e}")
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+
+
+# --- LOCAL DEVELOPMENT ---
+if POOLING:  # for local development/test if there's no external url for webhook
     logger.info("Starting bot in polling mode...")
     bot.polling(interval=10)

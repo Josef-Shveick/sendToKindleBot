@@ -1,8 +1,4 @@
 requests
 telebot
 beautifulsoup4
-lxml
 transliterate
-fastapi
-mangum
-uvicorn

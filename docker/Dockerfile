@@ -1,9 +1,10 @@
-FROM python:3.15.0a6-alpine
+FROM ubuntu:22.04
 
-WORKDIR /bot
+RUN apt-get update && apt-get install -y \
+    calibre \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY bot.py html_parser.py requirements.txt send_to_kindle.py helpers /bot/
+WORKDIR /data
 
-RUN pip install --no-cache-dir --upgrade -r /bot/requirements.txt
-
-CMD ["uvicorn", "bot:app", "--host", "0.0.0.0", "--port", "5000"]
+ENTRYPOINT ["ebook-convert"]
