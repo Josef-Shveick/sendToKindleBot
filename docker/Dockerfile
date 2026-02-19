@@ -7,7 +7,8 @@ COPY bot.py html_parser.py send_to_kindle.py requirements.txt helpers ./
 ADD helpers helpers
 
 # Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Set Lambda handler
 CMD ["bot.handler"]

@@ -3,10 +3,11 @@ from bs4 import BeautifulSoup
 import base64
 from transliterate import translit
 import os
+from helpers.logger import logger
 
 # set POOLING=true for local development - output will be saved to local attachments folder
 storage = "attachments" if os.environ.get("POOLING", "false").lower() == "true" else "/tmp"
-
+known_resources = 'habr.com',
 
 class HTMLParser:
     def __init__(self, link):
@@ -15,7 +16,14 @@ class HTMLParser:
     @property
     def _resource(self):
         """Identify resource name from the link"""
-        return self.link.split('/')[2]
+        logger.info("Attempting to get resource name from link")
+        logger.info(self.link)
+        resource = self.link.split('/')[2]
+        logger.info(f"Got Resource: {resource}")
+        if resource in known_resources:
+            return resource
+        else:
+            logger.error("Resource not known")
 
     @property
     def _containers(self):
@@ -29,11 +37,13 @@ class HTMLParser:
                 "body": "div.article-formatted-body > div"  # body element for full HTML
             }
         }
-        return containers[self._resource]
+        return containers.get(self._resource)
 
     def _raw_text(self, header=False):
         response = requests.get(self.link)
         soup = BeautifulSoup(response.content, 'html.parser')
+        logger.debug("!!!!!!!!Got content for parse!!!!!!!!!!!!!!")
+        logger.debug(soup)
         if header:
             header_selector = self._containers["text"][0]
             header_element = soup.select_one(header_selector)

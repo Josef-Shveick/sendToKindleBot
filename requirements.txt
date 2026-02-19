@@ -2,3 +2,5 @@ requests
 telebot
 beautifulsoup4
 transliterate
+fastapi
+mangum
