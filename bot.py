@@ -11,7 +11,7 @@ from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
 
 # --- BOT & FASTAPI INIT ---
-bot = telebot.TeleBot(TELEBOT_KEY)
+bot = telebot.TeleBot(TELEBOT_KEY, threaded=False)
 app = FastAPI()
 handler = Mangum(app)
 
