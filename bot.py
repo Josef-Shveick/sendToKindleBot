@@ -12,11 +12,11 @@ from html_parser import HTMLParser
 bot = telebot.TeleBot(TELEBOT_KEY)
 
 # --- MODE SELECTION ---
-POOLING = os.environ.get("POOLING", "false").lower() == "true"
+# POOLING = os.environ.get("POOLING", "false").lower() == "true"
 
+# if not POOLING:
 # Webhook URL for Lambda deployment
-WEBHOOK_BASE_URL = os.environ.get("AWS_LAMBDA_FUNCTION_URL") or os.environ.get("WEBHOOK_BASE_URL")
-WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/{TELEBOT_KEY}/" if WEBHOOK_BASE_URL else None
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 # This flag ensures we only set webhook once per cold start
 _webhook_checked = False
@@ -25,7 +25,7 @@ _webhook_checked = False
 def set_webhook():
     """Register Telegram webhook once (idempotent)."""
     global _webhook_checked
-    if _webhook_checked or not WEBHOOK_URL:
+    if _webhook_checked:
         return
 
     try:
@@ -129,6 +129,8 @@ def handler(event, context):
     AWS Lambda entrypoint.
     Receives Telegram webhook updates as event["body"]
     """
+    logger.info(f"Received event: {event}")
+    logger.info(WEBHOOK_URL)
     set_webhook()  # ensure webhook is set once
 
     try:
@@ -139,7 +141,7 @@ def handler(event, context):
         update = telebot.types.Update.de_json(body)
         bot.process_new_updates([update])
 
-        return {"statusCode": 200, "body": json.dumps({"ok": True})}
+        return {"statusCode": 200, "body": json.dumps({"ok": body})}
 
     except Exception as e:
         logger.error(f"Error processing update: {e}")
@@ -147,6 +149,6 @@ def handler(event, context):
 
 
 # --- LOCAL DEVELOPMENT ---
-if POOLING:  # for local development/test if there's no external url for webhook
-    logger.info("Starting bot in polling mode...")
-    bot.polling(interval=10)
+# if POOLING:  # for local development/test if there's no external url for webhook
+#     logger.info("Starting bot in polling mode...")
+#     bot.polling(interval=10)

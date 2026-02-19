@@ -1,10 +1,10 @@
 services:
-  calibre_converter:
-    container_name: calibre_converter_container
-    image: calibre_converter_image:1.0.0
+  kindle_bot_aws:
+    container_name: kindle_bot_aws_container
+    image: kindle_bot_aws_image:1.0.4
     build:
       context: ..
       dockerfile: docker/Dockerfile
-#    ports:
-#      - "80:5000"
-#    env_file: ../secrets.env
+    ports:
+      - "9000:8080"
+    env_file: ../secrets.env

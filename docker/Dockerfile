@@ -1,10 +1,13 @@
-FROM ubuntu:22.04
+FROM amazon/aws-lambda-python:3.13
 
-RUN apt-get update && apt-get install -y \
-    calibre \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /var/task
 
-WORKDIR /data
+# Copy your bot code
+COPY bot.py html_parser.py send_to_kindle.py requirements.txt helpers ./
+ADD helpers helpers
 
-ENTRYPOINT ["ebook-convert"]
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Set Lambda handler
+CMD ["bot.handler"]
