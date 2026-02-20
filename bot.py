@@ -18,38 +18,39 @@ handler = Mangum(app)
 # --- GLOBAL FLAGS ---
 POOLING = os.environ.get("POOLING", "false").lower() == "true"
 _webhook_checked = False
-_processed_update_ids = set()   # ✅ prevent duplicate processing
+_processed_update_ids = set()   # prevent duplicate processing
 
 
 # --- BOT HANDLERS (always registered) ---
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    logger.info("!!!!!!!!!!!!Triggering start reply!!!!!!!!!!!!")
+    logger.info("Triggering start reply")
     username = message.from_user.username
-    bot.reply_to(message, f"Yo {username}! What's up?")
+    bot.reply_to(message, f"Yo, {username}! What's up?")
 
 
-# ✅ unified handler to avoid missing content types
+# unified handler to avoid missing content types
 @bot.message_handler(func=lambda m: True, content_types=[
     "text", "photo", "document"
 ])
 def process_message(message):
 
-    logger.info("!!!!!!!!!!!Received message!!!!!!!!!!!")
+    logger.info("Received message")
     logger.info(f"Content type: {message.content_type}")
 
     username = message.from_user.username
 
     # -----------------------------
-    # 1️⃣ DOCUMENT HANDLING (.epub)
+    # DOCUMENT HANDLING (.epub)
     # -----------------------------
     if message.content_type == "document":
-        logger.info("!!!!!!!!!!!!Received document!!!!!!!!!!!!")
+        logger.info("Received document")
 
         file = message.document
         if not file:
             logger.warning("Document content_type but document is None")
+            bot.send_message(message.chat.id, "Failed to process message content")
             return
 
         file_name = file.file_name
@@ -81,7 +82,7 @@ def process_message(message):
 
 
     # ------------------------------------
-    # 2️⃣ TEXT / PHOTO CAPTION LINK HANDLING
+    # TEXT / PHOTO CAPTION LINK HANDLING
     # ------------------------------------
     message_text = message.text or message.caption or ""
     entities = message.entities or message.caption_entities or []
@@ -123,10 +124,9 @@ def process_message(message):
         return
 
     # ------------------------------------
-    # 3️⃣ FALLBACK
+    # FALLBACK
     # ------------------------------------
-    bot.send_message(message.chat.id,
-                     "No file or links found in the message.")
+    bot.send_message(message.chat.id, "No file or links found in the message.")
 
 
 # --- WEBHOOK SETUP (for AWS Lambda) ---
@@ -179,12 +179,12 @@ if not POOLING:
 
         try:
             json_data = await request.json()
-            logger.info("!!!!!!!!!!!Received request!!!!!!!!!!!")
+            logger.info("Received new request")
             logger.info(json_data)
 
             update = telebot.types.Update.de_json(json_data)
 
-            # ✅ duplicate protection
+            # duplicate protection
             if update.update_id in _processed_update_ids:
                 logger.info(f"Ignoring duplicate update {update.update_id}")
                 return {"ok": True}
@@ -193,14 +193,14 @@ if not POOLING:
             if len(_processed_update_ids) > 1000:
                 _processed_update_ids.pop()
 
-            logger.info(f"Processing update {update.update_id}")
+            logger.info(f"Processing request {update.update_id}")
 
             bot.process_new_updates([update])
 
             return {"ok": True}
 
         except Exception as e:
-            logger.error(f"Error processing Telegram update: {e}",
+            logger.error(f"Error processing request: {e}",
                          exc_info=True)
             return {"error": str(e)}
 
