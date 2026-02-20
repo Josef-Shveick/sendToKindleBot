@@ -6,10 +6,9 @@ from io import BytesIO
 import requests
 import os
 import re
-import urllib.parse
 
 from send_to_kindle import send_email, TELEBOT_KEY
-from html_parser import HTMLParser
+from html_parser import KindleHTMLParser
 
 # --- BOT & FASTAPI INIT ---
 bot = telebot.TeleBot(TELEBOT_KEY, threaded=False)
@@ -97,7 +96,7 @@ def process_message(message):
                              "Some links found. Generating HTML")
 
             try:
-                article = HTMLParser(link)
+                article = KindleHTMLParser(link)
                 article.generate_kindle_html()
                 email_sent = send_email(
                     article.kindle_html,

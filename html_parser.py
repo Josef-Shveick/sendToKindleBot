@@ -1,9 +1,10 @@
 import os
 import re
 import base64
-import requests
 from io import BytesIO
 from urllib.parse import urljoin
+
+import requests
 import trafilatura
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -17,7 +18,7 @@ MIN_IMAGE_SIZE = 2 * 1024  # skip tiny tracking pixels
 storage = "attachments" if os.environ.get("POOLING", "false").lower() == "true" else "/tmp"
 
 
-class HTMLParser:
+class KindleHTMLParser:
     def __init__(self, link: str):
         self.link = link
         self._downloaded = None
@@ -35,13 +36,9 @@ class HTMLParser:
             allow_redirects=True
         )
         response.raise_for_status()
-
-        # IMPORTANT: update canonical link
         self.link = response.url
-
-        logger.info(f"Final resolved URL: {self.link}")
-
         self._downloaded = response.text
+        logger.info(f"Final resolved URL: {self.link}")
         return self._downloaded
 
     # ------------------------
@@ -66,10 +63,9 @@ class HTMLParser:
         return extracted
 
     # ------------------------
-    # Process images for Kindle (1-bit PNG inline)
+    # Process images (1-bit PNG, base64)
     # ------------------------
     def _process_image_monochrome_png(self, img_url, max_width=800):
-        """Download image, convert to 1-bit PNG, return base64 data URL."""
         try:
             absolute_url = urljoin(self.link, img_url)
             response = requests.get(absolute_url, timeout=10)
@@ -77,31 +73,50 @@ class HTMLParser:
                 return None
 
             image_bytes = response.content
-            image_size = len(image_bytes)
-            if image_size < MIN_IMAGE_SIZE or image_size > MAX_IMAGE_SIZE:
+            if len(image_bytes) < MIN_IMAGE_SIZE or len(image_bytes) > MAX_IMAGE_SIZE:
                 return None
 
             img = Image.open(BytesIO(image_bytes))
-
-            # Resize if needed
             if img.width > max_width:
                 ratio = max_width / img.width
-                new_height = int(img.height * ratio)
-                img = img.resize((max_width, new_height), Image.LANCZOS)
-
-            # Convert to 1-bit monochrome
+                img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
             img = img.convert("1")
 
-            # Save to buffer
             buffer = BytesIO()
             img.save(buffer, format="PNG", optimize=True)
             encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
             return f"data:image/png;base64,{encoded}"
         except Exception as e:
             logger.warning(f"Failed processing image {img_url}: {e}")
             return None
 
+    # ------------------------
+    # Sanitize HTML for Kindle
+    # ------------------------
+    def _sanitize_for_kindle(self, html: str) -> str:
+        soup = BeautifulSoup(html, "html.parser")
+        supported_tags = ("p", "h1", "h2", "h3", "h4", "h5", "h6",
+                          "ul", "ol", "li", "table", "tr", "td", "th", "img", "br")
+
+        # Remove unsupported tags but keep content
+        for tag in soup.find_all(True):
+            if tag.name not in supported_tags:
+                tag.unwrap()
+
+        # Clean attributes
+        for tag in soup.find_all(True):
+            if tag.name == "img":
+                for attr in list(tag.attrs.keys()):
+                    if attr != "src":
+                        del tag[attr]
+            else:
+                tag.attrs = {}
+
+        return str(soup)
+
+    # ------------------------
+    # Inline images in HTML
+    # ------------------------
     def _inline_images(self, html: str) -> str:
         soup = BeautifulSoup(html, "html.parser")
         total_size = len(html.encode("utf-8"))
@@ -133,7 +148,7 @@ class HTMLParser:
         return final_html
 
     # ------------------------
-    # Header (safe filename)
+    # Safe header/filename
     # ------------------------
     @property
     def header(self) -> str:
@@ -153,22 +168,22 @@ class HTMLParser:
         return f"{storage}/{self.header}.html"
 
     # ------------------------
-    # Generate final HTML
+    # Generate final Kindle-safe HTML
     # ------------------------
     def generate_kindle_html(self) -> str:
         extracted_html = self._extract()
-        final_body = self._inline_images(extracted_html)
-        final_html = f"""
-        <html>
-            <head>
-                <meta charset="utf-8">
-                <title>{self.header}</title>
-            </head>
-            <body>
-                {final_body}
-            </body>
-        </html>
-        """
+        inlined_html = self._inline_images(extracted_html)
+        sanitized_html = self._sanitize_for_kindle(inlined_html)
+
+        final_html = f"""<html>
+        <head>
+        <meta charset="utf-8">
+        <title>{self.header}</title>
+        </head>
+        <body>
+        {sanitized_html}
+        </body>
+        </html>"""
 
         if len(final_html.encode("utf-8")) > MAX_FILE_SIZE:
             raise ValueError("Generated file exceeds 5MB limit")
@@ -182,8 +197,8 @@ class HTMLParser:
 
 
 if __name__ == "__main__":
-    # url = "https://u.habr.com/jYUSB"
     url = "https://www.freecodecamp.org/news/kubernetes-networking-tutorial-for-developers"
-    parser = HTMLParser(url)
+    # url = "https://u.habr.com/koFCO"
+    parser = KindleHTMLParser(url)
     parser.generate_kindle_html()
     print(f"Saved to: {parser.kindle_html}")
