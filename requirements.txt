@@ -4,3 +4,6 @@ beautifulsoup4
 transliterate
 fastapi
 mangum
+trafilatura
+pillow
+lxml_html_clean
