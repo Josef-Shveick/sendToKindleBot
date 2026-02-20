@@ -1,7 +1,7 @@
 services:
   kindle_bot_aws:
     container_name: kindle_bot_aws_container
-    image: kindle_bot_aws_image:1.0.5
+    image: kindle_bot_aws_image:1.1.0
     build:
       context: ..
       dockerfile: docker/Dockerfile

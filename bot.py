@@ -5,7 +5,8 @@ from mangum import Mangum
 from io import BytesIO
 import requests
 import os
-import json
+import re
+import urllib.parse
 
 from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
@@ -87,12 +88,7 @@ def process_message(message):
     message_text = message.text or message.caption or ""
     entities = message.entities or message.caption_entities or []
 
-    links = []
-    for entity in entities:
-        if entity.type == "text_link":
-            url = getattr(entity, "url", None)
-            if url and ".jpg" not in url:
-                links.append(url)
+    links = extract_links(message_text, entities)
 
     if links:
         logger.info(f"Links found: {links}")
@@ -127,6 +123,29 @@ def process_message(message):
     # FALLBACK
     # ------------------------------------
     bot.send_message(message.chat.id, "No file or links found in the message.")
+
+
+def extract_links(message_text, entities) -> list[str]:
+    links = set()
+
+    # 1. Use Telegram entities
+    for entity in entities or []:
+        if entity.type == "url":
+            beginning = entity.offset
+            end = beginning + entity.length
+            links.add(message_text[beginning:end])
+        elif entity.type == "text_link" and entity.url:
+            links.add(entity.url)
+
+    # 2. always add regex matches (deduplicated by set)
+    regex_links = re.findall(r'https?://[^\s<>"\]\)]+', message_text or "")
+    links.update(regex_links)
+
+    # 3. Filter out local/internal addresses
+    forbidden_patterns = ("127.0.0.1", "localhost", "169.254.169.254")
+    safe_links = [l for l in links if not any(host in l for host in forbidden_patterns)]
+
+    return safe_links
 
 
 # --- WEBHOOK SETUP (for AWS Lambda) ---
