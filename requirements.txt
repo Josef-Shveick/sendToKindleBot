@@ -7,3 +7,4 @@ mangum
 trafilatura
 pillow
 lxml_html_clean
+cairosvg
