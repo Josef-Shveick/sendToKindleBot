@@ -24,36 +24,31 @@ class HTMLParser:
         if not self.downloaded:
             raise ValueError("Failed to download the page")
 
-        # ✅ NEW: rewrite SVG sources before extraction
         self._rewrite_svg_sources()
 
         self.header = self._generate_header()
         self.filename = f"{self.header}.html"
 
-    # ---------------------------------------------------------
-    # NEW: SVG rewrite before extraction
-    # ---------------------------------------------------------
-
     def _rewrite_svg_sources(self) -> None:
         """
+        trafilatura looses .svg images during html extraction, so
         Before trafilatura extraction:
         If img/graphic src contains .svg → convert to PNG
         and rewrite ONLY src value.
         """
         soup = BeautifulSoup(self.downloaded, "html.parser")
 
-        for tag in soup.find_all(["img", "graphic"]):
+        for tag in soup.find_all(["img", "graphic"]): # update possible picture tags list if needed
             src = tag.get("src")
             if not src or ".svg" not in src.lower():
                 continue
 
             try:
+                src = urljoin(self.link, src)
+
+                # handle protocol relative urls like //site.com/img.png
                 if src.startswith("//"):
                     src = "https:" + src
-                elif src.startswith("/"):
-                    src = urljoin(self.link, src)
-                else:
-                    src = urljoin(self.link, src)
 
                 response = requests.get(src, timeout=15)
                 response.raise_for_status()
@@ -63,11 +58,11 @@ class HTMLParser:
                     output_width=800
                 )
 
-                temp_file = f"/tmp/{uuid.uuid4().hex}.png"
+                temp_file = f"/{storage}/{uuid.uuid4().hex}.png"
                 with open(temp_file, "wb") as f:
                     f.write(png_bytes)
 
-                # ✅ Only update src
+                # update src value to pint to converted local image
                 tag["src"] = temp_file
 
                 logger.info(f"Rewrote SVG src to PNG: {src}")
@@ -94,9 +89,6 @@ class HTMLParser:
     def kindle_html(self) -> str:
         return f"{storage}/{self.filename}"
 
-    # ---------------------------------------------------------
-    # Updated image embedding (only rewrite src)
-    # ---------------------------------------------------------
 
     def _embed_images(self, soup: BeautifulSoup) -> None:
         """
@@ -110,7 +102,7 @@ class HTMLParser:
                 continue
 
             try:
-                if src.startswith("/tmp/") and os.path.exists(src):
+                if src.startswith(f"/{storage}/") and os.path.exists(src):
                     image = Image.open(src)
                 else:
                     if src.startswith("//"):
@@ -140,7 +132,7 @@ class HTMLParser:
 
                 base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-                # 🔥 Always replace tag with real <img>
+                # Always replace tag with real <img>
                 new_img = soup.new_tag(
                     "img",
                     src=f"data:image/jpeg;base64,{base64_data}"
