@@ -1,0 +1,25 @@
+FROM python:3.13-alpine
+
+WORKDIR /app
+
+# Install runtime + build dependencies for Cairo
+RUN apk add --no-cache \
+    cairo \
+    cairo-dev \
+    pango \
+    gdk-pixbuf \
+    libffi-dev \
+    build-base \
+    jpeg-dev \
+    zlib-dev \
+    freetype-dev
+
+# Copy project
+COPY bot.py html_parser.py send_to_kindle.py requirements.txt ./
+ADD helpers helpers
+
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+CMD ["/bin/sh"]

@@ -2,8 +2,19 @@ FROM amazon/aws-lambda-python:3.13
 
 WORKDIR /var/task
 
+# Install system dependencies for Cairo
+RUN dnf install -y \
+    cairo \
+    cairo-devel \
+    pango \
+    pango-devel \
+    gdk-pixbuf2 \
+    libffi-devel \
+    gcc \
+    && dnf clean all
+
 # Copy your bot code
-COPY bot.py html_parser.py send_to_kindle.py requirements.txt helpers ./
+COPY bot.py html_parser.py send_to_kindle.py requirements.txt ./
 ADD helpers helpers
 
 # Install dependencies
