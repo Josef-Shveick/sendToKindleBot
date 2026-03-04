@@ -28,6 +28,7 @@ class HTMLParser:
 
         self.header = self._generate_header()
         self.filename = f"{self.header}.html"
+        self.tmp_converted_svgs = dict() # temporary storage for converted svg images
 
     def _rewrite_svg_sources(self) -> None:
         """
@@ -38,7 +39,7 @@ class HTMLParser:
         """
         soup = BeautifulSoup(self.downloaded, "html.parser")
 
-        for tag in soup.find_all(["img", "graphic"]): # update possible picture tags list if needed
+        for tag in soup.find_all(["img", "graphic", "picture"]): # update possible image tags list as needed
             src = tag.get("src")
             if not src or ".svg" not in src.lower():
                 continue
@@ -58,12 +59,11 @@ class HTMLParser:
                     output_width=800
                 )
 
-                temp_file = f"/{storage}/{uuid.uuid4().hex}.png"
-                with open(temp_file, "wb") as f:
-                    f.write(png_bytes)
+                temp_png_object_name = f"{uuid.uuid4().hex}.png"
+                self.tmp_converted_svgs.update({temp_png_object_name:png_bytes})
 
-                # update src value to pint to converted local image
-                tag["src"] = temp_file
+                # update src value to point to converted image object in tmp dict storage
+                tag["src"] = temp_png_object_name
 
                 logger.info(f"Rewrote SVG src to PNG: {src}")
 
@@ -92,18 +92,21 @@ class HTMLParser:
 
     def _embed_images(self, soup: BeautifulSoup) -> None:
         """
-        After extraction:
-        Encode images to base64 and rewrite ONLY src value.
+        Update html extracted by trafilatura.
+        Encode images to base64 and embed rewriting src value in graphic tags.
         """
 
-        for tag in soup.find_all(["img", "graphic"]):
+        # trafilatura converts all img contained tags to graphic
+        for tag in soup.find_all("graphic"):
             src = tag.get("src")
             if not src:
                 continue
 
             try:
-                if src.startswith(f"/{storage}/") and os.path.exists(src):
-                    image = Image.open(src)
+                image_bytes = self.tmp_converted_svgs.pop(src, None)
+
+                if image_bytes: # if image was converted from svg and stored in tmp dict
+                    image = Image.open(BytesIO(image_bytes))
                 else:
                     if src.startswith("//"):
                         src = "https:" + src
@@ -132,7 +135,7 @@ class HTMLParser:
 
                 base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-                # Always replace tag with real <img>
+                # Always replace tag with <img>, Kindle not displays <graphic>
                 new_img = soup.new_tag(
                     "img",
                     src=f"data:image/jpeg;base64,{base64_data}"
@@ -141,7 +144,7 @@ class HTMLParser:
                 tag.replace_with(new_img)
 
             except Exception as e:
-                logger.info(f"Image optimization failed: {src} -> {e}")
+                logger.info(f"Image embedding failed: {src} -> {e}")
 
     # ---------------------------------------------------------
 
