@@ -19,8 +19,9 @@ class HTMLParser:
 
     def __init__(self, link: str):
         self.link = link
-        self.downloaded = trafilatura.fetch_url(link)
+        self.tmp_converted_svgs = dict()  # temporary storage for converted svg images
 
+        self.downloaded = trafilatura.fetch_url(link)
         if not self.downloaded:
             raise ValueError("Failed to download the page")
 
@@ -28,7 +29,6 @@ class HTMLParser:
 
         self.header = self._generate_header()
         self.filename = f"{self.header}.html"
-        self.tmp_converted_svgs = dict() # temporary storage for converted svg images
 
     def _rewrite_svg_sources(self) -> None:
         """
