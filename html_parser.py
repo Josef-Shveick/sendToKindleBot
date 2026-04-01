@@ -31,8 +31,10 @@ class HTMLParser:
         self.link = link
         self.tmp_converted_svgs = dict()  # temporary storage for converted svg images
 
+        logger.info(f"Parsing URL: {link}")
         self.downloaded = trafilatura.fetch_url(link, config=_trafilatura_config)
         if not self.downloaded:
+            logger.error(f"Failed to download: {link}")
             raise ValueError("Failed to download the page")
 
         self._rewrite_svg_sources()
@@ -78,7 +80,7 @@ class HTMLParser:
                 logger.info(f"Rewrote SVG src to PNG: {src}")
 
             except Exception as e:
-                logger.info(f"SVG rewrite failed: {src} -> {e}")
+                logger.warning(f"SVG rewrite failed: {src} -> {e}")
 
         self.downloaded = str(soup)
 
@@ -125,6 +127,7 @@ class HTMLParser:
 
                     response = requests.get(src, timeout=10, headers=BROWSER_HEADERS)
                     if response.status_code != 200:
+                        logger.warning(f"Image skipped (HTTP {response.status_code}): {src}")
                         continue
 
                     image = Image.open(BytesIO(response.content))
@@ -154,11 +157,12 @@ class HTMLParser:
                 tag.replace_with(new_img)
 
             except Exception as e:
-                logger.info(f"Image embedding failed: {src} -> {e}")
+                logger.warning(f"Image embedding failed: {src} -> {e}")
 
     # ---------------------------------------------------------
 
     def generate_kindle_html(self) -> None:
+        logger.info(f"Extracting article content: {self.link}")
 
         extracted_html = trafilatura.extract(
             self.downloaded,
@@ -169,6 +173,7 @@ class HTMLParser:
         )
 
         if not extracted_html:
+            logger.error(f"Trafilatura extraction returned empty result: {self.link}")
             raise ValueError("Failed to extract article content")
 
         soup = BeautifulSoup(extracted_html, "html.parser")
