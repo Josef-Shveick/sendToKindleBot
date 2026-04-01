@@ -2,6 +2,7 @@ import os
 import base64
 import requests
 import trafilatura
+from trafilatura.settings import use_config
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import re
@@ -12,6 +13,15 @@ import uuid
 
 from helpers.logger import logger
 
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "*",
+}
+
+_trafilatura_config = use_config()
+_trafilatura_config.set("DEFAULT", "USER_AGENTS", BROWSER_HEADERS["User-Agent"])
+
 storage = "attachments" if os.environ.get("POOLING", "false").lower() == "true" else "/tmp"
 
 
@@ -21,7 +31,7 @@ class HTMLParser:
         self.link = link
         self.tmp_converted_svgs = dict()  # temporary storage for converted svg images
 
-        self.downloaded = trafilatura.fetch_url(link)
+        self.downloaded = trafilatura.fetch_url(link, config=_trafilatura_config)
         if not self.downloaded:
             raise ValueError("Failed to download the page")
 
@@ -51,7 +61,7 @@ class HTMLParser:
                 if src.startswith("//"):
                     src = "https:" + src
 
-                response = requests.get(src, timeout=15)
+                response = requests.get(src, timeout=15, headers=BROWSER_HEADERS)
                 response.raise_for_status()
 
                 png_bytes = cairosvg.svg2png(
@@ -113,7 +123,7 @@ class HTMLParser:
                     elif src.startswith("/"):
                         src = urljoin(self.link, src)
 
-                    response = requests.get(src, timeout=10)
+                    response = requests.get(src, timeout=10, headers=BROWSER_HEADERS)
                     if response.status_code != 200:
                         continue
 
