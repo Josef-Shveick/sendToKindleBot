@@ -18,6 +18,8 @@ RUN apk add --no-cache \
 COPY bot.py html_parser.py send_to_kindle.py requirements.txt ./
 ADD helpers helpers
 
+ENV POOLING=true
+
 # Upgrade pip and install Python dependencies
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
