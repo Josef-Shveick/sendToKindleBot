@@ -4,7 +4,7 @@ import requests
 import trafilatura
 from trafilatura.settings import use_config
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import re
 from PIL import Image
 from io import BytesIO
@@ -19,6 +19,10 @@ BROWSER_HEADERS = {
     "Accept-Language": "*",
 }
 
+PROXY_DOMAINS = "medium.com",
+
+SCRAPESTACK_KEY = os.environ.get("SCRAPESTACK_KEY")
+
 _trafilatura_config = use_config()
 _trafilatura_config.set("DEFAULT", "USER_AGENTS", BROWSER_HEADERS["User-Agent"])
 
@@ -32,7 +36,7 @@ class HTMLParser:
         self.tmp_converted_svgs = dict()  # temporary storage for converted svg images
 
         logger.info(f"Parsing URL: {link}")
-        self.downloaded = trafilatura.fetch_url(link, config=_trafilatura_config)
+        self.downloaded = self._fetch(link)
         if not self.downloaded:
             logger.error(f"Failed to download: {link}")
             raise ValueError("Failed to download the page")
@@ -43,6 +47,35 @@ class HTMLParser:
 
         self.header = self._generate_header()
         self.filename = f"{self.header}.html"
+
+    @staticmethod
+    def _needs_proxy(url: str) -> bool:
+        hostname = urlparse(url).hostname or ""
+        return any(domain in hostname for domain in PROXY_DOMAINS)
+
+    @staticmethod
+    def _fetch(url: str) -> str | None:
+        """Download page directly, or via scrapestack for blocked domains."""
+        if HTMLParser._needs_proxy(url):
+            if not SCRAPESTACK_KEY:
+                raise ValueError("SCRAPESTACK_KEY is not set")
+            logger.info(f"Fetching via scrapestack: {url}")
+            try:
+                resp = requests.get(
+                    "https://api.scrapestack.com/scrape",
+                    params={"access_key": SCRAPESTACK_KEY, "url": url},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                if len(resp.text) > 512:
+                    logger.info("scrapestack fetch succeeded")
+                    return resp.text
+                logger.warning(f"scrapestack response too short ({len(resp.text)} chars)")
+            except Exception as e:
+                logger.error(f"scrapestack fetch failed: {e}")
+
+        logger.info(f"Fetching via trafilatura: {url}")
+        return trafilatura.fetch_url(url, config=_trafilatura_config)
 
     def _fix_lazy_images(self) -> None:
         """
@@ -220,7 +253,7 @@ class HTMLParser:
                     image = image.resize((max_width, new_height), Image.LANCZOS)
 
                 buffer = BytesIO()
-                image.save(buffer, format="JPEG", quality=60, optimize=True)
+                image.save(buffer, format="JPEG", quality=80, optimize=True)
 
                 base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
@@ -277,11 +310,11 @@ if __name__ == "__main__":
     url2 = "https://learnkube.com/etcd-breaks-at-scale"
     url3 = "https://issaouiadam.medium.com/the-kubelet-deep-dive-understanding-pod-startup-failures-155f94ba7433"
 
-    article1 = HTMLParser(url1)
-    article1.generate_kindle_html()
+    # article1 = HTMLParser(url1)
+    # article1.generate_kindle_html()
 
-    article2 = HTMLParser(url2)
-    article2.generate_kindle_html()
+    # article2 = HTMLParser(url2)
+    # article2.generate_kindle_html()
 
-    article3 = HTMLParser(url3)
-    article3.generate_kindle_html()
+    # article3 = HTMLParser(url3)
+    # article3.generate_kindle_html()
