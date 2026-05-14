@@ -8,7 +8,6 @@ from urllib.parse import urljoin, urlparse
 import re
 from PIL import Image
 from io import BytesIO
-import cairosvg
 import uuid
 
 from helpers.logger import logger
@@ -157,9 +156,11 @@ class HTMLParser:
         """
         trafilatura looses .svg images during html extraction, so
         Before trafilatura extraction:
-        If img/graphic src contains .svg → convert to PNG
+        If img/graphic src contains .svg -> convert to PNG
         and rewrite ONLY src value.
         """
+        import cairosvg
+
         soup = BeautifulSoup(self.downloaded, "html.parser")
 
         for tag in soup.find_all(["img", "graphic", "picture"]): # update possible image tags list as needed
