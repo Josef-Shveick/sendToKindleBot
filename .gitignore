@@ -6,3 +6,9 @@ secrets.*
 attachments/
 play*.py
 send_to_kindle_bot.log
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
+terraform/crash.log
+terraform/*.tfplan
