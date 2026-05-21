@@ -1,36 +1,162 @@
 from helpers.logger import logger
 import telebot
 from fastapi import FastAPI, Request
+from mangum import Mangum
 from io import BytesIO
 import requests
 import os
+import re
 
 from send_to_kindle import send_email, TELEBOT_KEY
 from html_parser import HTMLParser
 
-# Create an instance of the bot
-bot = telebot.TeleBot(TELEBOT_KEY)
+# --- BOT & FASTAPI INIT ---
+bot = telebot.TeleBot(TELEBOT_KEY, threaded=False)
 app = FastAPI()
+handler = Mangum(app)
 
-
-# --- MODE SELECTION ---
+# --- GLOBAL FLAGS ---
 POOLING = os.environ.get("POOLING", "false").lower() == "true"
+_webhook_checked = False
+_processed_update_ids = set()   # prevent duplicate processing
 
+
+# --- BOT HANDLERS (always registered) ---
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    logger.info("Triggering start reply")
+    username = message.from_user.username
+    bot.reply_to(message, f"Yo, {username}! What's up?")
+
+
+# unified handler to avoid missing content types
+@bot.message_handler(func=lambda m: True, content_types=[
+    "text", "photo", "document"
+])
+def process_message(message):
+
+    logger.info("Received message")
+    logger.info(f"Content type: {message.content_type}")
+
+    username = message.from_user.username
+
+    # -----------------------------
+    # DOCUMENT HANDLING (.epub)
+    # -----------------------------
+    if message.content_type == "document":
+        logger.info("Received document")
+
+        file = message.document
+        if not file:
+            logger.warning("Document content_type but document is None")
+            bot.send_message(message.chat.id, "Failed to process message content")
+            return
+
+        file_name = file.file_name
+        logger.info(f"Document name: {file_name}")
+
+        if not file_name.endswith(".epub"):
+            bot.send_message(message.chat.id,
+                             "Unsupported file format. Only .epub files accepted")
+            return
+
+        try:
+            file_info = bot.get_file(file.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            file_buffer = BytesIO(downloaded_file)
+        except Exception as e:
+            logger.error(f"Error downloading file: {e}", exc_info=True)
+            bot.send_message(message.chat.id,
+                             f"Error downloading file: {str(e)}")
+            return
+
+        file_sent = send_email(file_buffer, file_name, username)
+        if file_sent:
+            bot.send_message(message.chat.id,
+                             f"{file_name} sent to {username} Kindle successfully.")
+        else:
+            bot.send_message(message.chat.id,
+                             f"Failed to send {file_name} to {username} Kindle.")
+        return
+
+
+    # ------------------------------------
+    # TEXT / PHOTO CAPTION LINK HANDLING
+    # ------------------------------------
+    message_text = message.text or message.caption or ""
+    entities = message.entities or message.caption_entities or []
+
+    links = extract_links(message_text, entities)
+
+    if links:
+        logger.info(f"Links found: {links}")
+        for link in links:
+            bot.send_message(message.chat.id,
+                             "Some links found. Generating HTML")
+
+            try:
+                article = HTMLParser(link)
+                article.generate_kindle_html()
+                email_sent = send_email(
+                    article.kindle_html,
+                    article.filename,
+                    username
+                )
+
+                if email_sent:
+                    bot.send_message(message.chat.id,
+                                     "HTML sent to Kindle successfully.")
+                else:
+                    bot.send_message(message.chat.id,
+                                     "Failed to send HTML to Kindle.")
+
+            except Exception as e:
+                logger.error(f"Error processing link {link}: {e}",
+                             exc_info=True)
+                bot.send_message(message.chat.id,
+                                 "Error processing the link.")
+        return
+
+    # ------------------------------------
+    # FALLBACK
+    # ------------------------------------
+    bot.send_message(message.chat.id, "No file or links found in the message.")
+
+
+def extract_links(message_text, entities) -> list[str]:
+    links = set()
+
+    # 1. Use Telegram entities
+    for entity in entities or []:
+        if entity.type == "url":
+            beginning = entity.offset
+            end = beginning + entity.length
+            links.add(message_text[beginning:end])
+        elif entity.type == "text_link" and entity.url:
+            links.add(entity.url)
+
+    # 2. always add regex matches (deduplicated by set)
+    regex_links = re.findall(r'https?://[^\s<>"\]\)]+', message_text or "")
+    links.update(regex_links)
+
+    # 3. Filter out local/internal addresses
+    forbidden_patterns = ("127.0.0.1", "localhost", "169.254.169.254")
+    safe_links = [l for l in links if not any(host in l for host in forbidden_patterns)]
+
+    return safe_links
+
+
+# --- WEBHOOK SETUP (for AWS Lambda) ---
 if not POOLING:
-    # Auto-detect your AWS Lambda Function URL if available
-    WEBHOOK_BASE_URL = os.environ.get("AWS_LAMBDA_FUNCTION_URL") or os.environ.get("WEBHOOK_BASE_URL")
 
-    if not WEBHOOK_BASE_URL:
-        raise RuntimeError("No WEBHOOK_BASE_URL found — set AWS_LAMBDA_FUNCTION_URL or WEBHOOK_BASE_URL")
-
-    WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/{TELEBOT_KEY}/"
-
-    @app.on_event("startup")
-    def on_startup():
-        set_webhook()
+    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
     def set_webhook():
-        """Register Telegram webhook once (idempotent)."""
+        global _webhook_checked
+        if _webhook_checked:
+            return
+
         get_info_url = f"https://api.telegram.org/bot{TELEBOT_KEY}/getWebhookInfo"
         set_url = f"https://api.telegram.org/bot{TELEBOT_KEY}/setWebhook"
 
@@ -41,9 +167,12 @@ if not POOLING:
 
             if data.get("ok") and data["result"].get("url") == WEBHOOK_URL:
                 logger.info(f"Webhook already set to {WEBHOOK_URL}")
+                _webhook_checked = True
                 return
 
-            resp = requests.post(set_url, data={"url": WEBHOOK_URL}, timeout=10)
+            resp = requests.post(set_url,
+                                 data={"url": WEBHOOK_URL},
+                                 timeout=10)
             resp.raise_for_status()
 
             if resp.json().get("ok"):
@@ -52,90 +181,49 @@ if not POOLING:
                 logger.info(f"Failed to set webhook: {resp.text}")
 
         except Exception as e:
-            logger.info(f"Error while setting webhook: {e}")
+            logger.error(f"Error while setting webhook: {e}",
+                         exc_info=True)
 
-    @app.post(f"/{TELEBOT_KEY}/")
+        _webhook_checked = True
+
+
+    @app.on_event("startup")
+    def on_startup():
+        set_webhook()
+
+
+    @app.post("/SendToKindleBot")
     async def telegram_webhook(request: Request):
-        """Receive Telegram updates via webhook"""
-        json_data = await request.json()
-        update = telebot.types.Update.de_json(json_data)
-        bot.process_new_updates([update])
-        return {"ok": True}
-
-    @app.get("/")
-    def root():
-        return {"status": "ok"}
-
-
-# --- BOT HANDLERS ---
-
-# Handle the /start command
-@bot.message_handler(commands=['start'])
-def start(message):
-    username = message.from_user.username
-    bot.reply_to(message, f"Yo {username}! What's up?")
-
-
-# Handle incoming messages
-@bot.message_handler(func=lambda message: True)
-def process_link(message):
-    # Get the message text
-    message_text = message.text
-
-    # Get the entities in the message
-    entities = message.entities
-
-    # Extract hidden links from the message
-    links = []
-    if entities:
-        for entity in entities:
-            if entity.type == "text_link" and '.jpg' not in entity.url:
-                links.append(entity.url)
-
-    if links:
-        logger.info(f"Some links found. Generating html for {links}")
-        for link in links:
-            bot.send_message(message.chat.id, "Some links found. Generating html")
-            article = HTMLParser(link)
-            article.generate_kindle_html()
-            email_sent = send_email(article.kindle_html, message_text, message.from_user.username)
-
-            if email_sent:
-                bot.send_message(message.chat.id, "HTML sent to kindle successfully.")
-            else:
-                bot.send_message(message.chat.id, "Failed to send HTML to kindle.")
-    else:
-        bot.send_message(message.chat.id, "No file or links found in the message.")
-
-
-@bot.message_handler(content_types=['document'])
-def process_file(message):
-    files = [message.document]
-    username = message.from_user.username
-    for file in files:
-        file_name = file.file_name
-
-        if not file_name.endswith('.epub'):
-            bot.send_message(message.chat.id, f"Unsupported file format. Only .epub files accepted")
-            return
-
-        file_info = bot.get_file(file.file_id)
-        bot.send_message(message.chat.id, f"File found: {file_name}.\nAttempting to send to {username} kindle...")
 
         try:
-            downloaded_file = bot.download_file(file_info.file_path)
-            file_buffer = BytesIO(downloaded_file)  # In-memory file-like object not to save file to disk
+            json_data = await request.json()
+            logger.info("Received new request")
+            logger.info(json_data)
+
+            update = telebot.types.Update.de_json(json_data)
+
+            # duplicate protection
+            if update.update_id in _processed_update_ids:
+                logger.info(f"Ignoring duplicate update {update.update_id}")
+                return {"ok": True}
+
+            _processed_update_ids.add(update.update_id)
+            if len(_processed_update_ids) > 1000:
+                _processed_update_ids.pop()
+
+            logger.info(f"Processing request {update.update_id}")
+
+            bot.process_new_updates([update])
+
+            return {"ok": True}
+
         except Exception as e:
-            bot.send_message(message.chat.id, f"Error downloading file: {str(e)}")
-            return
-
-        file_sent = send_email(file_buffer, file_name, username)
-        if file_sent:
-            bot.send_message(message.chat.id, f"{file_name} sent to {username} kindle successfully.")
-        else:
-            bot.send_message(message.chat.id, f"Failed to send {file_name} to {username} kindle.")
+            logger.error(f"Error processing request: {e}",
+                         exc_info=True)
+            return {"error": str(e)}
 
 
-if POOLING: # for local development/test if there's no external url for webhook
+# --- LOCAL POLLING (for dev) ---
+if POOLING:
     logger.info("Starting bot in polling mode...")
-    bot.polling(interval=10)
+    bot.polling(interval=3)

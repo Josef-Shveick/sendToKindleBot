@@ -2,6 +2,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from io import BytesIO
 import os
 
 from helpers.logger import logger
@@ -39,9 +40,16 @@ def send_email(file_obj, filename, username):
     # Add the body text
     message.attach(MIMEText(body, 'plain'))
 
-    # Prepare the attachment from in-memory object
-    file_obj.seek(0)
-    attachment = MIMEApplication(file_obj.read())
+    if isinstance(file_obj, str): # It's a file path, read it
+        with open(file_obj, 'rb') as f:
+            file_content = f.read()
+    elif isinstance(file_obj, BytesIO): # It's a BytesIO object
+        file_obj.seek(0)
+        file_content = file_obj.read()
+    else:
+        raise TypeError(f"Unsupported file_obj type: {type(file_obj)}")
+
+    attachment = MIMEApplication(file_content, _subtype="html")
     attachment.add_header('Content-Disposition', 'attachment', filename=filename)
     message.attach(attachment)
 
@@ -49,6 +57,7 @@ def send_email(file_obj, filename, username):
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(message)
+            logger.info("Email sent successfully")
         return True
     except Exception as e:
         logger.error(f"Error sending email: {str(e)}")

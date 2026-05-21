@@ -2,7 +2,13 @@
 venv/
 __pycache__/
 .pytest_cache/
-secrets.env
+secrets.*
 attachments/
-play.py
+play*.py
 send_to_kindle_bot.log
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
+terraform/crash.log
+terraform/*.tfplan
