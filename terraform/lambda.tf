@@ -6,7 +6,7 @@ resource "aws_lambda_function" "kindlebot" {
   function_name = "SendToKindleBot"
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.kindlebot.repository_url}@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  image_uri     = "${aws_ecr_repository.kindlebot.repository_url}@${var.image_digest}"
   memory_size   = 512
   timeout       = 30
   architectures = ["x86_64"]
@@ -17,7 +17,6 @@ resource "aws_lambda_function" "kindlebot" {
 
   lifecycle {
     ignore_changes = [
-      image_uri,
       reserved_concurrent_executions,
     ]
   }
