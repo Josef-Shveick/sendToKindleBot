@@ -56,9 +56,9 @@ def process_message(message):
         file_name = file.file_name
         logger.info(f"Document name: {file_name}")
 
-        if not file_name.endswith(".epub"):
+        if not file_name.endswith((".epub", ".txt")):
             bot.send_message(message.chat.id,
-                             "Unsupported file format. Only .epub files accepted")
+                             "Unsupported file format. Only .epub and .txt files accepted")
             return
 
         try:
