@@ -14,7 +14,7 @@ RUN dnf install -y \
     && dnf clean all
 
 # Copy your bot code
-COPY bot.py html_parser.py send_to_kindle.py requirements.txt ./
+COPY bot.py html_parser.py send_to_kindle.py delivery.py send_to_dropbox.py requirements.txt ./
 ADD helpers helpers
 
 # Install dependencies
