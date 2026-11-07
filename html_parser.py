@@ -252,16 +252,16 @@ class HTMLParser:
                     new_height = max(1, round(image.height * max_width / image.width))
                     image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
-                # Keep JPEG for reader compatibility, with higher quality for text.
+                # Avoid JPEG artifacts around small text.
                 buffer = BytesIO()
-                image.save(buffer, format="JPEG", quality=95, optimize=True)
+                image.save(buffer, format="PNG")
 
                 base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
                 # Always replace tag with <img>, Kindle not displays <graphic>
                 new_img = soup.new_tag(
                     "img",
-                    src=f"data:image/jpeg;base64,{base64_data}"
+                    src=f"data:image/png;base64,{base64_data}"
                 )
 
                 tag.replace_with(new_img)
