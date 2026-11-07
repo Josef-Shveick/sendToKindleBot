@@ -15,7 +15,7 @@ RUN apk add --no-cache \
     freetype-dev
 
 # Copy project
-COPY bot.py html_parser.py send_to_kindle.py requirements.txt ./
+COPY bot.py html_parser.py send_to_kindle.py delivery.py send_to_dropbox.py requirements.txt ./
 ADD helpers helpers
 
 ENV POOLING=true

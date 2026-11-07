@@ -7,7 +7,8 @@ import requests
 import os
 import re
 
-from send_to_kindle import send_email, TELEBOT_KEY
+from send_to_kindle import TELEBOT_KEY
+from delivery import delivery_destination, send_file
 from html_parser import HTMLParser
 
 # --- BOT & FASTAPI INIT ---
@@ -71,13 +72,14 @@ def process_message(message):
                              f"Error downloading file: {str(e)}")
             return
 
-        file_sent = send_email(file_buffer, file_name, username)
+        destination = delivery_destination(username)
+        file_sent = send_file(file_buffer, file_name, username)
         if file_sent:
             bot.send_message(message.chat.id,
-                             f"{file_name} sent to {username} Kindle successfully.")
+                             f"{file_name} sent to {username} {destination} successfully.")
         else:
             bot.send_message(message.chat.id,
-                             f"Failed to send {file_name} to {username} Kindle.")
+                             f"Failed to send {file_name} to {username} {destination}.")
         return
 
 
@@ -98,18 +100,19 @@ def process_message(message):
             try:
                 article = HTMLParser(link)
                 article.generate_kindle_html()
-                email_sent = send_email(
+                destination = delivery_destination(username)
+                file_sent = send_file(
                     article.kindle_html,
                     article.filename,
                     username
                 )
 
-                if email_sent:
+                if file_sent:
                     bot.send_message(message.chat.id,
-                                     "HTML sent to Kindle successfully.")
+                                     f"HTML sent to {destination} successfully.")
                 else:
                     bot.send_message(message.chat.id,
-                                     "Failed to send HTML to Kindle.")
+                                     f"Failed to send HTML to {destination}.")
 
             except Exception as e:
                 logger.error(f"Error processing link {link}: {e}",
