@@ -180,7 +180,7 @@ class HTMLParser:
 
                 png_bytes = cairosvg.svg2png(
                     bytestring=response.content,
-                    output_width=800
+                    output_width=1600
                 )
 
                 temp_png_object_name = f"{uuid.uuid4().hex}.png"
@@ -246,22 +246,22 @@ class HTMLParser:
 
                 image = image.convert("L")
 
-                # Resize
-                max_width = 800
+                # Limit file size while retaining more text detail than the old 800px cap.
+                max_width = 1600
                 if image.width > max_width:
-                    ratio = max_width / image.width
-                    new_height = int(image.height * ratio)
-                    image = image.resize((max_width, new_height), Image.LANCZOS)
+                    new_height = max(1, round(image.height * max_width / image.width))
+                    image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
+                # Avoid JPEG artifacts around small text.
                 buffer = BytesIO()
-                image.save(buffer, format="JPEG", quality=80, optimize=True)
+                image.save(buffer, format="PNG")
 
                 base64_data = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
                 # Always replace tag with <img>, Kindle not displays <graphic>
                 new_img = soup.new_tag(
                     "img",
-                    src=f"data:image/jpeg;base64,{base64_data}"
+                    src=f"data:image/png;base64,{base64_data}"
                 )
 
                 tag.replace_with(new_img)
